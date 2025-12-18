@@ -5,7 +5,9 @@ Simple Tasks Blocks is a standalone, lightweight task manager for Obsidian. It a
 ## Key Features
 
 - **Standalone Management**: Tasks are stored internally and do not clutter your notes or vault.
-- **Categorized and Movable Blocks**: Group your tasks into clean, rounded blocks that can be reordered by drag-and-drop.
+- **Categorized and Movable Blocks**: Group your tasks into clean, rounded blocks. Easily reorder them using the vertical drag handle.
+- **In-place Editing**: Click directly on any task text or category title to rename it instantly.
+- **No-Keyboard Workflow**: Create tasks and categories entirely via dedicated buttons and interactive menus.
 - **Due Dates & Calendars**: Assign dates to tasks with a built-in date picker.
 - **Smart Sorting**: Sort tasks chronologically. Tasks without dates are automatically treated as "Today".
 - **Visual Alerts**: Overdue tasks turn red, and tasks due today are highlighted.
@@ -32,3 +34,4 @@ Search for "Simple Tasks Blocks" in the Community Plugins settings.
 2. Create a folder named `simple-tasks-blocks` in your vault's `.obsidian/plugins/` directory.
 3. Move the downloaded files into that folder.
 4. Reload Obsidian and enable the plugin.
+
