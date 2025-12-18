@@ -1,0 +1,10 @@
+{
+  "id": "simple-tasks-blocks",
+  "name": "Simple Tasks Blocks",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "Standalone task manager in the sidebar. Create independent task blocks with due dates and chronological sorting without affecting your notes.",
+  "author": "Franck Walden",
+  "authorUrl": "https://github.com/Walden73",
+  "isDesktopOnly": false
+}
