@@ -53,6 +53,7 @@
 
 .stb-header-icon {
     color: var(--text-muted);
+    
 }
 
 .stb-header-icon:hover {
@@ -355,4 +356,45 @@ input[type="date"].stb-hidden-date-input[style*="display: block"] {
     justify-content: flex-end;
     gap: 10px;
     margin-top: 20px;
+}
+
+/* --- New Scratchpad Styles --- */
+
+.stb-scratchpad-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.stb-scratchpad-textarea {
+    width: 100%;
+    height: 300px;
+    flex-grow: 1;
+    resize: none;
+    margin-bottom: 10px;
+    font-family: var(--font-monospace);
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.stb-scratchpad-btn {
+    color: var(--text-muted);
+    opacity: 0.5;
+    transform: scale(0.9);
+}
+
+.stb-scratchpad-btn:hover {
+    color: var(--text-normal);
+    opacity: 1;
+}
+
+.stb-scratchpad-btn.has-content {
+    color: var(--text-accent);
+    opacity: 1;
+}
+.stb-hidden {
+    display: none !important;
 }
