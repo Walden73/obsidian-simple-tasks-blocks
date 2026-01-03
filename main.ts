@@ -133,7 +133,7 @@ export default class SimpleTasksBlocksPlugin extends Plugin {
 			await leaf.setViewState({ type: VIEW_TYPE_TASKS, active: true });
 		}
 
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 }
 
@@ -153,7 +153,7 @@ class SimpleTasksBlocksSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Settings for simple tasks blocks')
+			.setName('Simple tasks blocks')
 			.setHeading();
 
 		new Setting(containerEl)
@@ -171,8 +171,8 @@ class SimpleTasksBlocksSettingTab extends PluginSettingTab {
 			.setDesc('Choose how dates are displayed.')
 			.addDropdown(dropdown => dropdown
 			.addOption('Automatic', 'Automatique (selon la langue de Obsidian)')
-			.addOption('YYYY-MM-DD', 'Année-Mois-Jour (ex: 2026-01-02)')
-			.addOption('DD-MM-YYYY', 'Jour-Mois-Année (ex: 02-01-2026)')	
+			.addOption('YYYY-MM-DD', 'Année-mois-jour (ex: 2026-01-02)')
+			.addOption('DD-MM-YYYY', 'Jour-mois-année (ex: 02-01-2026)')	
 				.setValue(this.plugin.settings.dateFormat)
 				.onChange(async (value) => {
 					this.plugin.settings.dateFormat = value as SimpleTasksBlocksSettings['dateFormat'];
@@ -219,7 +219,7 @@ class TasksView extends ItemView {
 		const header = container.createEl('div', { cls: 'stb-header' });
 		const grid = header.createEl('div', { cls: 'stb-header-grid' });
 		
-		const leftPart = grid.createEl('div', { cls: 'stb-header-part-left' }); 
+		grid.createEl('div', { cls: 'stb-header-part-left' }); 
 		
 		const centerPart = grid.createEl('div', { cls: 'stb-header-part-center' });
 		const addCategoryBtn = centerPart.createEl('button', { text: '+ category', cls: 'mod-cta' });
@@ -293,12 +293,12 @@ class TasksView extends ItemView {
 			catBlock.removeClass('stb-drag-over');
 		});
 
-		catBlock.addEventListener('drop', async (e) => {
+		catBlock.addEventListener('drop', (e) => {
 			e.preventDefault();
 			catBlock.removeClass('stb-drag-over');
 			
 			if (this.draggedCategoryIndex !== null && this.draggedCategoryIndex !== index) {
-				await this.reorderCategories(this.draggedCategoryIndex, index);
+				void this.reorderCategories(this.draggedCategoryIndex, index);
 			}
 		});
 
@@ -421,7 +421,7 @@ class TasksView extends ItemView {
 					if ('showPicker' in HTMLInputElement.prototype) {
 						try {
 							(dateInput as HTMLInputElement & { showPicker(): void }).showPicker();
-						} catch (error) {
+						} catch {
 							// Fallback: Toggle visibility
 							if (dateInput.style.display === 'none') {
 								dateInput.show();
