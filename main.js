@@ -48,16 +48,14 @@ var SimpleTasksBlocksPlugin = class extends import_obsidian.Plugin {
     await this.loadSettings();
     this.registerView(
       VIEW_TYPE_TASKS,
-      (leaf) => {
-        return new TasksView(leaf, this);
-      }
+      (leaf) => new TasksView(leaf, this)
     );
-    this.addRibbonIcon("list-checks", "Simple tasks blocks", (evt) => {
+    this.addRibbonIcon("list-checks", "Simple tasks blocks", () => {
       void this.activateView();
     });
     this.addCommand({
       id: "create-new-task-category",
-      name: "Create a new task category",
+      name: "Create new task category",
       callback: () => {
         new AddCategoryModal(this.app, (name, firstTask, date) => {
           void this.addCategory(name, firstTask, date);
@@ -75,6 +73,7 @@ var SimpleTasksBlocksPlugin = class extends import_obsidian.Plugin {
     await this.saveData(this.settings);
     this.refreshViews();
   }
+  // On ne stocke rien, on boucle sur toutes les instances ouvertes
   refreshViews() {
     this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKS).forEach((leaf) => {
       if (leaf.view instanceof TasksView) {
@@ -123,13 +122,13 @@ var SimpleTasksBlocksSettingTab = class extends import_obsidian.PluginSettingTab
     const { containerEl } = this;
     containerEl.empty();
     new import_obsidian.Setting(containerEl).setName("Settings for simple tasks blocks").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Confirm task deletion").setDesc("Ask for confirmation before deleting a task.").addToggle((toggle) => toggle.setValue(this.plugin.settings.confirmTaskDeletion).onChange((value) => {
+    new import_obsidian.Setting(containerEl).setName("Confirm task deletion").setDesc("Ask for confirmation before deleting a task.").addToggle((toggle) => toggle.setValue(this.plugin.settings.confirmTaskDeletion).onChange(async (value) => {
       this.plugin.settings.confirmTaskDeletion = value;
-      void this.plugin.saveSettings();
+      await this.plugin.saveSettings();
     }));
-    new import_obsidian.Setting(containerEl).setName("Date format").setDesc("Choose how dates are displayed.").addDropdown((dropdown) => dropdown.addOption("Automatic", "Automatic").addOption("YYYY-MM-DD", "YYYY-MM-DD").addOption("DD-MM-YYYY", "DD-MM-YYYY").setValue(this.plugin.settings.dateFormat).onChange((value) => {
+    new import_obsidian.Setting(containerEl).setName("Date format").setDesc("Choose how dates are displayed.").addDropdown((dropdown) => dropdown.addOption("Automatic", "Automatique (selon la langue de Obsidian)").addOption("YYYY-MM-DD", "Ann\xE9e-Mois-Jour (ex: 2026-01-02)").addOption("DD-MM-YYYY", "Jour-Mois-Ann\xE9e (ex: 02-01-2026)").setValue(this.plugin.settings.dateFormat).onChange(async (value) => {
       this.plugin.settings.dateFormat = value;
-      void this.plugin.saveSettings();
+      await this.plugin.saveSettings();
     }));
   }
 };
@@ -146,8 +145,9 @@ var TasksView = class extends import_obsidian.ItemView {
   getDisplayText() {
     return "Simple tasks blocks";
   }
-  async onOpen() {
+  onOpen() {
     this.refresh();
+    return Promise.resolve();
   }
   async onClose() {
   }
@@ -159,7 +159,7 @@ var TasksView = class extends import_obsidian.ItemView {
     const grid = header.createEl("div", { cls: "stb-header-grid" });
     const leftPart = grid.createEl("div", { cls: "stb-header-part-left" });
     const centerPart = grid.createEl("div", { cls: "stb-header-part-center" });
-    const addCategoryBtn = centerPart.createEl("button", { text: "+ Category", cls: "mod-cta" });
+    const addCategoryBtn = centerPart.createEl("button", { text: "+ category", cls: "mod-cta" });
     addCategoryBtn.addEventListener("click", () => {
       new AddCategoryModal(this.app, (name, firstTask, date) => {
         void this.plugin.addCategory(name, firstTask, date);
@@ -168,7 +168,7 @@ var TasksView = class extends import_obsidian.ItemView {
     const rightPart = grid.createEl("div", { cls: "stb-header-part-right" });
     const toggleAllBtn = rightPart.createEl("div", { cls: "stb-header-icon clickable-icon" });
     (0, import_obsidian.setIcon)(toggleAllBtn, "chevrons-up-down");
-    toggleAllBtn.setAttribute("aria-label", "Fold/Unfold All");
+    toggleAllBtn.setAttribute("aria-label", "Toggle collapse/expand for all categories");
     toggleAllBtn.addEventListener("click", () => {
       void this.toggleAllCategories();
     });
@@ -176,7 +176,7 @@ var TasksView = class extends import_obsidian.ItemView {
     (0, import_obsidian.setIcon)(cleanBtn, "eraser");
     cleanBtn.setAttribute("aria-label", "Clean completed tasks");
     cleanBtn.addEventListener("click", () => {
-      new ConfirmModal(this.app, "Delete all completed tasks from all categories?", () => {
+      new ConfirmModal(this.app, "Delete ALL completed tasks from ALL categories?", () => {
         void this.cleanCompletedTasks();
       }).open();
     });
@@ -284,9 +284,9 @@ var TasksView = class extends import_obsidian.ItemView {
         this.renderTask(tasksList, category, task);
       });
       const inlineContainer = catBlock.createEl("div", { cls: "stb-add-task-inline" });
-      inlineContainer.addClass("stb-hidden");
+      inlineContainer.hide();
       const showInput = () => {
-        inlineContainer.removeClass("stb-hidden");
+        inlineContainer.show();
         inlineContainer.empty();
         const wrapper = inlineContainer.createEl("div", { cls: "stb-inline-input-wrapper" });
         const input = wrapper.createEl("input", { type: "text", placeholder: "New task..." });
@@ -294,27 +294,26 @@ var TasksView = class extends import_obsidian.ItemView {
         const dateBtn = wrapper.createEl("div", { cls: "stb-inline-date-btn clickable-icon" });
         (0, import_obsidian.setIcon)(dateBtn, "calendar");
         const dateInput = wrapper.createEl("input", { type: "date", cls: "stb-hidden-date-input" });
-        dateInput.addClass("stb-hidden");
+        dateInput.hide();
         dateBtn.addEventListener("click", (e) => {
-          var _a;
           e.stopPropagation();
           if ("showPicker" in HTMLInputElement.prototype) {
             try {
-              (_a = dateInput.showPicker) == null ? void 0 : _a.call(dateInput);
+              dateInput.showPicker();
             } catch (error) {
-              if (dateInput.hasClass("stb-hidden")) {
-                dateInput.removeClass("stb-hidden");
+              if (dateInput.style.display === "none") {
+                dateInput.show();
                 dateInput.focus();
               } else {
-                dateInput.addClass("stb-hidden");
+                dateInput.hide();
               }
             }
           } else {
-            if (dateInput.hasClass("stb-hidden")) {
-              dateInput.removeClass("stb-hidden");
+            if (dateInput.style.display === "none") {
+              dateInput.show();
               dateInput.focus();
             } else {
-              dateInput.addClass("stb-hidden");
+              dateInput.hide();
             }
           }
         });
@@ -333,14 +332,14 @@ var TasksView = class extends import_obsidian.ItemView {
             await this.addTask(category.id, text, dateInput.value || void 0);
           }
           inlineContainer.empty();
-          inlineContainer.addClass("stb-hidden");
+          inlineContainer.hide();
         };
         input.addEventListener("keydown", (e) => {
           if (e.key === "Enter")
             void submit();
           if (e.key === "Escape") {
             inlineContainer.empty();
-            inlineContainer.addClass("stb-hidden");
+            inlineContainer.hide();
           }
         });
         input.addEventListener("blur", (e) => {
@@ -406,21 +405,20 @@ var TasksView = class extends import_obsidian.ItemView {
     const dateEditBtn = rightActions.createEl("div", { cls: "stb-task-date-btn clickable-icon" });
     (0, import_obsidian.setIcon)(dateEditBtn, "calendar");
     const dateEditInput = rightActions.createEl("input", { type: "date", cls: "stb-hidden-date-input" });
-    dateEditInput.addClass("stb-hidden");
+    dateEditInput.hide();
     if (task.dueDate)
       dateEditInput.value = task.dueDate;
     dateEditBtn.addEventListener("click", (e) => {
-      var _a;
       e.stopPropagation();
       if ("showPicker" in HTMLInputElement.prototype) {
         try {
-          (_a = dateEditInput.showPicker) == null ? void 0 : _a.call(dateEditInput);
+          dateEditInput.showPicker();
         } catch (e2) {
-          dateEditInput.removeClass("stb-hidden");
+          dateEditInput.show();
           dateEditInput.focus();
         }
       } else {
-        dateEditInput.removeClass("stb-hidden");
+        dateEditInput.show();
         dateEditInput.focus();
       }
     });
@@ -429,11 +427,11 @@ var TasksView = class extends import_obsidian.ItemView {
         task.dueDate = dateEditInput.value;
         void this.plugin.saveSettings();
       }
-      dateEditInput.addClass("stb-hidden");
+      dateEditInput.hide();
     });
     dateEditInput.addEventListener("blur", () => {
       setTimeout(() => {
-        dateEditInput.addClass("stb-hidden");
+        dateEditInput.hide();
       }, 200);
     });
     const scratchpadBtn = rightActions.createEl("div", { cls: "stb-scratchpad-btn clickable-icon" });
@@ -457,7 +455,7 @@ var TasksView = class extends import_obsidian.ItemView {
           void this.deleteTask(category.id, task.id);
         }).open();
       } else {
-        this.deleteTask(category.id, task.id);
+        void this.deleteTask(category.id, task.id);
       }
     });
   }
@@ -578,7 +576,7 @@ var AddCategoryModal = class extends import_obsidian.Modal {
   }
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Add a new category" });
+    contentEl.createEl("h2", { text: "Add new category" });
     const nameDiv = contentEl.createDiv({ cls: "stb-modal-field" });
     nameDiv.createEl("label", { text: "Category name" });
     const nameInput = nameDiv.createEl("input", { type: "text" });
