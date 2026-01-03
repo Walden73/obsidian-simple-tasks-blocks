@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, ItemView, Modal, Notice, setIcon, Menu } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, WorkspaceLeaf, ItemView, Modal, Notice, setIcon, Menu, moment } from 'obsidian';
 
 // --- Interfaces ---
 
@@ -7,6 +7,7 @@ interface Task {
 	text: string;
 	completed: boolean;
 	dueDate?: string; // YYYY-MM-DD
+	scratchpad?: string;
 }
 
 interface Category {
@@ -46,23 +47,19 @@ const COLORS = {
 
 export default class SimpleTasksBlocksPlugin extends Plugin {
 	settings: SimpleTasksBlocksSettings;
-	view: TasksView | null = null;
 
 	async onload() {
 		await this.loadSettings();
 
-		// Register the view
+		// CORRECT : On crée et on retourne la vue sans l'assigner à une propriété du plugin
 		this.registerView(
 			VIEW_TYPE_TASKS,
-			(leaf) => {
-				this.view = new TasksView(leaf, this);
-				return this.view;
-			}
+			(leaf) => new TasksView(leaf, this)
 		);
 
 		// Add Ribbon Icon
-		this.addRibbonIcon('list-checks', 'Simple Tasks Blocks', (evt: MouseEvent) => {
-			this.activateView();
+		this.addRibbonIcon('list-checks', 'Simple tasks blocks', () => {
+			void this.activateView();
 		});
 
 		// Add Command
@@ -71,7 +68,7 @@ export default class SimpleTasksBlocksPlugin extends Plugin {
 			name: 'Create new task category',
 			callback: () => {
 				new AddCategoryModal(this.app, (name, firstTask, date) => {
-					this.addCategory(name, firstTask, date);
+					void this.addCategory(name, firstTask, date);
 				}).open();
 			}
 		});
@@ -80,8 +77,7 @@ export default class SimpleTasksBlocksPlugin extends Plugin {
 		this.addSettingTab(new SimpleTasksBlocksSettingTab(this.app, this));
 	}
 
-	async onunload() {
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_TASKS);
+	onunload() {
 	}
 
 	async loadSettings() {
@@ -90,10 +86,16 @@ export default class SimpleTasksBlocksPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-		// Refresh view if it exists
-		if (this.view) {
-			this.view.refresh();
-		}
+		this.refreshViews();
+	}
+
+	// On ne stocke rien, on boucle sur toutes les instances ouvertes
+	refreshViews() {
+		this.app.workspace.getLeavesOfType(VIEW_TYPE_TASKS).forEach(leaf => {
+			if (leaf.view instanceof TasksView) {
+				leaf.view.refresh();
+			}
+		});
 	}
 
 	async addCategory(name: string, firstTaskText: string, dueDate?: string) {
@@ -150,7 +152,9 @@ class SimpleTasksBlocksSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Settings for Simple Tasks Blocks' });
+		new Setting(containerEl)
+			.setName('Settings for simple tasks blocks')
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('Confirm task deletion')
@@ -163,15 +167,15 @@ class SimpleTasksBlocksSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Date Format')
+			.setName('Date format')
 			.setDesc('Choose how dates are displayed.')
 			.addDropdown(dropdown => dropdown
-				.addOption('Automatic', 'Automatic')
-				.addOption('YYYY-MM-DD', 'YYYY-MM-DD')
-				.addOption('DD-MM-YYYY', 'DD-MM-YYYY')
+			.addOption('Automatic', 'Automatique (selon la langue de Obsidian)')
+			.addOption('YYYY-MM-DD', 'Année-Mois-Jour (ex: 2026-01-02)')
+			.addOption('DD-MM-YYYY', 'Jour-Mois-Année (ex: 02-01-2026)')	
 				.setValue(this.plugin.settings.dateFormat)
 				.onChange(async (value) => {
-					this.plugin.settings.dateFormat = value as any;
+					this.plugin.settings.dateFormat = value as SimpleTasksBlocksSettings['dateFormat'];
 					await this.plugin.saveSettings();
 				}));
 	}
@@ -194,11 +198,12 @@ class TasksView extends ItemView {
 	}
 
 	getDisplayText() {
-		return "Simple Tasks Blocks";
+		return "Simple tasks blocks";
 	}
 
-	async onOpen() {
+	onOpen() {
 		this.refresh();
+		return Promise.resolve();
 	}
 
 	async onClose() {
@@ -217,10 +222,10 @@ class TasksView extends ItemView {
 		const leftPart = grid.createEl('div', { cls: 'stb-header-part-left' }); 
 		
 		const centerPart = grid.createEl('div', { cls: 'stb-header-part-center' });
-		const addCategoryBtn = centerPart.createEl('button', { text: '+ Category', cls: 'mod-cta' });
+		const addCategoryBtn = centerPart.createEl('button', { text: '+ category', cls: 'mod-cta' });
 		addCategoryBtn.addEventListener('click', () => {
 			new AddCategoryModal(this.app, (name, firstTask, date) => {
-				this.plugin.addCategory(name, firstTask, date);
+				void this.plugin.addCategory(name, firstTask, date);
 			}).open();
 		});
 
@@ -228,17 +233,17 @@ class TasksView extends ItemView {
 		
 		const toggleAllBtn = rightPart.createEl('div', { cls: 'stb-header-icon clickable-icon' });
 		setIcon(toggleAllBtn, 'chevrons-up-down');
-		toggleAllBtn.setAttribute('aria-label', 'Fold/Unfold All');
+		toggleAllBtn.setAttribute('aria-label', 'Toggle collapse/expand for all categories');
 		toggleAllBtn.addEventListener('click', () => {
-			this.toggleAllCategories();
+			void this.toggleAllCategories();
 		});
 
 		const cleanBtn = rightPart.createEl('div', { cls: 'stb-header-icon clickable-icon' });
 		setIcon(cleanBtn, 'eraser');
-		cleanBtn.setAttribute('aria-label', 'Clean Completed Tasks');
+		cleanBtn.setAttribute('aria-label', 'Clean completed tasks');
 		cleanBtn.addEventListener('click', () => {
-			new ConfirmModal(this.app, "Delete ALL completed tasks from ALL categories?", async () => {
-				await this.cleanCompletedTasks();
+			new ConfirmModal(this.app, "Delete ALL completed tasks from ALL categories?", () => {
+				void this.cleanCompletedTasks();
 			}).open();
 		});
 
@@ -254,7 +259,7 @@ class TasksView extends ItemView {
 	renderCategory(container: HTMLElement, category: Category, index: number) {
 		const catBlock = container.createEl('div', { cls: 'stb-category-block' });
 		if (category.color) {
-			catBlock.style.backgroundColor = category.color;
+			catBlock.setCssProps({ 'background-color': category.color });
 		}
 
 		// Drag & Drop Attributes
@@ -303,7 +308,7 @@ class TasksView extends ItemView {
 			const menu = new Menu();
 			
 			menu.addItem((item) => {
-				item.setTitle("Change Color")
+				item.setTitle("Change color")
 					.setIcon("palette");
 			});
 			
@@ -312,10 +317,10 @@ class TasksView extends ItemView {
 			Object.keys(COLORS).forEach((colorName) => {
 				menu.addItem((item) => {
 					item.setTitle(colorName)
-						.setChecked(category.color === (COLORS as any)[colorName])
-						.onClick(async () => {
-							category.color = (COLORS as any)[colorName];
-							await this.plugin.saveSettings();
+						.setChecked(category.color === COLORS[colorName as keyof typeof COLORS])
+						.onClick(() => {
+							category.color = COLORS[colorName as keyof typeof COLORS];
+							void this.plugin.saveSettings();
 						});
 				});
 			});
@@ -334,10 +339,10 @@ class TasksView extends ItemView {
 		// 1. Chevron
 		const chevron = catHeader.createEl('div', { cls: 'stb-cat-chevron clickable-icon' });
 		setIcon(chevron, category.isCollapsed ? 'chevron-right' : 'chevron-down');
-		chevron.addEventListener('click', async (e) => {
+		chevron.addEventListener('click', (e) => {
 			e.stopPropagation(); // prevent other clicks
 			category.isCollapsed = !category.isCollapsed;
-			await this.plugin.saveSettings();
+			void this.plugin.saveSettings();
 		});
 
 		// 2. Title (Editable)
@@ -355,16 +360,16 @@ class TasksView extends ItemView {
 		// 3. Sort Button
 		const sortBtn = catHeader.createEl('div', { cls: 'stb-cat-sort-btn clickable-icon' });
 		setIcon(sortBtn, 'arrow-up-down');
-		sortBtn.setAttribute('aria-label', 'Sort Tasks by Date');
-		sortBtn.addEventListener('click', async (e) => {
+		sortBtn.setAttribute('aria-label', 'Sort tasks by date');
+		sortBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
-			await this.sortCategoryTasks(category.id);
+			void this.sortCategoryTasks(category.id);
 		});
 		
 		// 4. Add Task Button
 		const addTaskHeaderBtn = catHeader.createEl('div', { cls: 'stb-cat-add-btn clickable-icon' });
 		setIcon(addTaskHeaderBtn, 'plus');
-		addTaskHeaderBtn.setAttribute('aria-label', 'Add Task');
+		addTaskHeaderBtn.setAttribute('aria-label', 'Add task');
 
 		// Spacer
 		catHeader.createEl('div', { cls: 'stb-spacer' });
@@ -372,11 +377,11 @@ class TasksView extends ItemView {
 		// 4. Delete Category Button
 		const deleteCatBtn = catHeader.createEl('div', { cls: 'stb-delete-cat-btn clickable-icon' });
 		setIcon(deleteCatBtn, 'trash');
-		deleteCatBtn.setAttribute('aria-label', 'Delete Category');
+		deleteCatBtn.setAttribute('aria-label', 'Delete category');
 		deleteCatBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
-			new ConfirmModal(this.app, `Are you sure you want to delete category "${category.name}"?`, async () => {
-				await this.deleteCategory(category.id);
+			new ConfirmModal(this.app, `Are you sure you want to delete category "${category.name}"?`, () => {
+				void this.deleteCategory(category.id);
 			}).open();
 		});
 
@@ -406,7 +411,7 @@ class TasksView extends ItemView {
 				
 				// Hidden Date Input
 				const dateInput = wrapper.createEl('input', { type: 'date', cls: 'stb-hidden-date-input' });
-				dateInput.style.display = 'none'; // Ensure hidden initially
+				dateInput.hide(); // Ensure hidden initially
 
 				dateBtn.addEventListener('click', (e) => {
 					e.stopPropagation();
@@ -415,15 +420,23 @@ class TasksView extends ItemView {
 					// But usually showPicker() works on modern browsers
 					if ('showPicker' in HTMLInputElement.prototype) {
 						try {
-							(dateInput as any).showPicker();
+							(dateInput as HTMLInputElement & { showPicker(): void }).showPicker();
 						} catch (error) {
 							// Fallback: Toggle visibility
-							dateInput.style.display = dateInput.style.display === 'none' ? 'block' : 'none';
-							if (dateInput.style.display === 'block') dateInput.focus();
+							if (dateInput.style.display === 'none') {
+								dateInput.show();
+								dateInput.focus();
+							} else {
+								dateInput.hide();
+							}
 						}
 					} else {
-						dateInput.style.display = dateInput.style.display === 'none' ? 'block' : 'none';
-						if (dateInput.style.display === 'block') dateInput.focus();
+						if (dateInput.style.display === 'none') {
+							dateInput.show();
+							dateInput.focus();
+						} else {
+							dateInput.hide();
+						}
 					}
 				});
 				
@@ -448,7 +461,7 @@ class TasksView extends ItemView {
 				};
 
 				input.addEventListener('keydown', (e) => {
-					if (e.key === 'Enter') submit();
+					if (e.key === 'Enter') void submit();
 					if (e.key === 'Escape') {
 						inlineContainer.empty();
 						inlineContainer.hide();
@@ -492,8 +505,7 @@ class TasksView extends ItemView {
 		let useFr = false;
 
 		if (format === 'Automatic') {
-			// @ts-ignore
-			const locale = window.moment ? window.moment.locale() : 'en';
+			const locale = moment.locale();
 			if (locale.startsWith('fr')) useFr = true;
 		} else if (format === 'DD-MM-YYYY') {
 			useFr = true;
@@ -512,8 +524,8 @@ class TasksView extends ItemView {
 		// Checkbox
 		const checkbox = taskRow.createEl('input', { type: 'checkbox' });
 		checkbox.checked = task.completed;
-		checkbox.addEventListener('change', async () => {
-			await this.toggleTask(category.id, task.id, checkbox.checked);
+		checkbox.addEventListener('change', () => {
+			void this.toggleTask(category.id, task.id, checkbox.checked);
 		});
 
 		// Text (Editable)
@@ -556,37 +568,52 @@ class TasksView extends ItemView {
 		setIcon(dateEditBtn, 'calendar');
 		// Hidden input for editing
 		const dateEditInput = rightActions.createEl('input', { type: 'date', cls: 'stb-hidden-date-input' });
-		dateEditInput.style.display = 'none';
+		dateEditInput.hide();
 		if (task.dueDate) dateEditInput.value = task.dueDate;
 
 		dateEditBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
 			if ('showPicker' in HTMLInputElement.prototype) {
 				try {
-					(dateEditInput as any).showPicker();
+					(dateEditInput as HTMLInputElement & { showPicker(): void }).showPicker();
 				} catch {
-					dateEditInput.style.display = 'block';
+					dateEditInput.show();
 					dateEditInput.focus();
 				}
 			} else {
-				dateEditInput.style.display = 'block';
+				dateEditInput.show();
 				dateEditInput.focus();
 			}
 		});
 
-		dateEditInput.addEventListener('change', async () => {
+		dateEditInput.addEventListener('change', () => {
 			if (dateEditInput.value !== task.dueDate) {
 				task.dueDate = dateEditInput.value;
-				await this.plugin.saveSettings(); // This refreshes view
+				void this.plugin.saveSettings(); // This refreshes view
 			}
-			dateEditInput.style.display = 'none';
+			dateEditInput.hide();
 		});
 		
 		dateEditInput.addEventListener('blur', () => {
 			// Hide on blur if not changed (change event fires before blur if changed? usually)
 			setTimeout(() => {
-				dateEditInput.style.display = 'none';
+				dateEditInput.hide();
 			}, 200);
+		});
+
+		// Scratchpad Button
+		const scratchpadBtn = rightActions.createEl('div', { cls: 'stb-scratchpad-btn clickable-icon' });
+		setIcon(scratchpadBtn, 'sticky-note');
+		if (task.scratchpad) scratchpadBtn.addClass('has-content');
+		
+		scratchpadBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			new ScratchpadModal(this.app, task.scratchpad || '', (newText) => {
+				if (newText !== task.scratchpad) {
+					task.scratchpad = newText;
+					void this.plugin.saveSettings();
+				}
+			}).open();
 		});
 
 		// Delete Task Button
@@ -594,11 +621,11 @@ class TasksView extends ItemView {
 		setIcon(deleteBtn, 'x');
 		deleteBtn.addEventListener('click', () => {
 			if (this.plugin.settings.confirmTaskDeletion) {
-				new ConfirmModal(this.app, `Delete task "${task.text}"?`, async () => {
-					await this.deleteTask(category.id, task.id);
+				new ConfirmModal(this.app, `Delete task "${task.text}"?`, () => {
+					void this.deleteTask(category.id, task.id);
 				}).open();
 			} else {
-				this.deleteTask(category.id, task.id);
+				void this.deleteTask(category.id, task.id);
 			}
 		});
 	}
@@ -635,17 +662,17 @@ class TasksView extends ItemView {
 			this.refresh();
 		};
 
-		input.addEventListener('keydown', async (e) => {
+		input.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') {
-				await save();
+				void save();
 			}
 			if (e.key === 'Escape') {
 				cancel();
 			}
 		});
 
-		input.addEventListener('blur', async () => {
-			await save();
+		input.addEventListener('blur', () => {
+			void save();
 		});
 	}
 
@@ -755,18 +782,18 @@ class AddCategoryModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.createEl("h2", { text: "Add New Category" });
+		contentEl.createEl("h2", { text: "Add new category" });
 
 		const nameDiv = contentEl.createDiv({ cls: 'stb-modal-field' });
-		nameDiv.createEl("label", { text: "Category Name" });
+		nameDiv.createEl("label", { text: "Category name" });
 		const nameInput = nameDiv.createEl("input", { type: "text" });
 
 		const taskDiv = contentEl.createDiv({ cls: 'stb-modal-field' });
-		taskDiv.createEl("label", { text: "First Task Name" });
+		taskDiv.createEl("label", { text: "First task name" });
 		const taskInput = taskDiv.createEl("input", { type: "text" });
 
 		const dateDiv = contentEl.createDiv({ cls: 'stb-modal-field' });
-		dateDiv.createEl("label", { text: "Due Date (Optional)" });
+		dateDiv.createEl("label", { text: "Due date (optional)" });
 		const dateInput = dateDiv.createEl("input", { type: "date" });
 
 		const buttonDiv = contentEl.createDiv({ cls: 'stb-modal-actions' });
@@ -783,6 +810,51 @@ class AddCategoryModal extends Modal {
 			}
 
 			this.onSubmit(name, task, date || undefined);
+			this.close();
+		});
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
+class ScratchpadModal extends Modal {
+	initialText: string;
+	onSave: (text: string) => void;
+
+	constructor(app: App, initialText: string, onSave: (text: string) => void) {
+		super(app);
+		this.initialText = initialText;
+		this.onSave = onSave;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.addClass('stb-scratchpad-modal');
+		contentEl.createEl("h3", { text: "Task scratchpad" });
+
+		const textarea = contentEl.createEl("textarea", { 
+			cls: 'stb-scratchpad-textarea',
+			text: this.initialText 
+		});
+		textarea.placeholder = "Write your notes here...";
+		
+		// Auto-focus and place cursor at end
+		textarea.focus();
+		textarea.setSelectionRange(this.initialText.length, this.initialText.length);
+
+		const buttonDiv = contentEl.createDiv({ cls: 'stb-modal-actions' });
+		const saveBtn = buttonDiv.createEl("button", { text: "Save", cls: "mod-cta" });
+		const cancelBtn = buttonDiv.createEl("button", { text: "Cancel" });
+
+		saveBtn.addEventListener("click", () => {
+			this.onSave(textarea.value);
+			this.close();
+		});
+
+		cancelBtn.addEventListener("click", () => {
 			this.close();
 		});
 	}
